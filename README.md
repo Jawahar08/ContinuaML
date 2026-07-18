@@ -1,3 +1,4 @@
+<a id="top"></a>
 <div align="center">
 
 ```
@@ -84,13 +85,13 @@ graph TB
         JWT_AUTH[JWT Authentication]
         
         subgraph ROUTERS["📡 API Routers"]
-            R_AUTH[/api/v1/auth/*]
-            R_MODELS[/api/v1/{ws}/models/*]
-            R_DATASETS[/api/v1/{ws}/datasets/*]
-            R_PLANS[/api/v1/{ws}/plans/*]
-            R_EXPERIMENTS[/api/v1/{ws}/experiments/*]
-            R_JOBS[/api/v1/{ws}/jobs/*]
-            R_REPORTS[/api/v1/{ws}/reports/*]
+            R_AUTH["auth"]
+            R_MODELS["models"]
+            R_DATASETS["datasets"]
+            R_PLANS["plans"]
+            R_EXPERIMENTS["experiments"]
+            R_JOBS["jobs"]
+            R_REPORTS["reports"]
         end
     end
 
@@ -742,6 +743,6 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
-**[⬆ Back to Top](#)**
+**[⬆ Back to Top](#top)**
 
 </div>
