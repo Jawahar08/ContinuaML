@@ -1,6 +1,8 @@
 import requests
 import time
 import sys
+import random
+import string
 
 API_BASE = "http://localhost:8000/api/v1"
 
@@ -19,9 +21,11 @@ def test_full_flow():
     exp_id = f"exp-e2e-01-{ts}"
     report_id = f"report-e2e-{ts}"
 
+    password = "".join(random.choices(string.ascii_letters + string.digits, k=12)) + "aA1!"
+
     # 1. Signup
     print("\n[Step 1] Creating new research user...")
-    signup_url = f"{API_BASE}/auth/signup?email={email}&password=E2ePass123!"
+    signup_url = f"{API_BASE}/auth/signup?email={email}&password={password}"
     res = requests.post(signup_url)
     if res.status_code != 201:
         print(f"FAILED: Signup returned {res.status_code} - {res.text}")
@@ -32,7 +36,7 @@ def test_full_flow():
     # 2. Login
     print("\n[Step 2] Authenticating session (JWT login)...")
     login_url = f"{API_BASE}/auth/login"
-    login_data = {"username": email, "password": "E2ePass123!"}
+    login_data = {"username": email, "password": password}
     res = requests.post(login_url, data=login_data)
     if res.status_code != 200:
         print(f"FAILED: Login returned {res.status_code} - {res.text}")
