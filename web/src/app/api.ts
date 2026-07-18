@@ -112,6 +112,61 @@ export async function getDatasets(workspaceId: string = "workspace_default") {
   return fetchFromApi<Dataset[]>(`/${workspaceId}/datasets`, DEMO_DATASETS);
 }
 
+export async function registerDataset(dataset: Dataset, workspaceId: string = "workspace_default") {
+  try {
+    const token = localStorage.getItem("token") || "";
+    const res = await fetch(`${API_BASE}/${workspaceId}/datasets`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(dataset)
+    });
+    if (!res.ok) throw new Error("API call failed");
+    const json = await res.json();
+    return { data: json as Dataset, status: "REAL" as const };
+  } catch (err) {
+    console.warn(`API call to register dataset failed. Simulating in-memory registration.`, err);
+    DEMO_DATASETS.push(dataset);
+    return { data: dataset, status: "DEMO" as const };
+  }
+}
+
+export async function importDatasetFile(
+  datasetId: string,
+  versionStr: string,
+  file: File,
+  workspaceId: string = "workspace_default"
+) {
+  try {
+    const token = localStorage.getItem("token") || "";
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch(`${API_BASE}/${workspaceId}/datasets/${datasetId}/import?version_str=${encodeURIComponent(versionStr)}`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`
+      },
+      body: formData
+    });
+    if (!res.ok) throw new Error("File upload failed");
+    const json = await res.json();
+    return { data: json, status: "REAL" as const };
+  } catch (err) {
+    console.warn(`API call to import dataset file failed. Simulating.`, err);
+    return {
+      data: {
+        message: "Dataset uploaded and verification queued (MOCKED)",
+        dataset_version_id: `${datasetId}-${versionStr.replace('.', '_')}`,
+        job_id: `job-ds-mocked-${Date.now()}`
+      },
+      status: "DEMO" as const
+    };
+  }
+}
+
 export async function getExperiments(workspaceId: string = "workspace_default") {
   return fetchFromApi<Experiment[]>(`/${workspaceId}/experiments`, DEMO_EXPERIMENTS);
 }

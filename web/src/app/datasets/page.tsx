@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import ClientLayout from "../client-layout";
-import { getDatasets, Dataset } from "../api";
-import { Database, FileSpreadsheet, ShieldCheck, Sparkles } from "lucide-react";
+import { getDatasets, registerDataset, importDatasetFile, Dataset } from "../api";
+import { Database, FileSpreadsheet, ShieldCheck, Sparkles, Plus, X, Upload } from "lucide-react";
 
 export default function DatasetsPage() {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
@@ -11,23 +11,89 @@ export default function DatasetsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    const loadDatasets = async () => {
-      setLoading(true);
-      try {
-        const res = await getDatasets();
-        setDatasets(res.data);
-        if (res.data.length > 0) {
-          setSelectedDataset(res.data[0]);
-        }
-      } catch (err) {
-        setError("Could not load dataset registry.");
-      } finally {
-        setLoading(false);
+  // Modal and form states
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    id: "",
+    name: "",
+    source: "HuggingFace",
+    license: "MIT",
+    version: "1.0"
+  });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+
+  const loadDatasets = async () => {
+    setLoading(true);
+    try {
+      const res = await getDatasets();
+      setDatasets(res.data);
+      if (res.data.length > 0) {
+        setSelectedDataset(res.data[0]);
       }
-    };
+    } catch (err) {
+      setError("Could not load dataset registry.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadDatasets();
   }, []);
+
+  const handleImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setImporting(true);
+    setImportError("");
+    try {
+      const workspaceId = "workspace_default";
+      const payload: Dataset = {
+        id: formData.id.trim(),
+        name: formData.name.trim(),
+        source: formData.source.trim(),
+        license: formData.license.trim(),
+        overlap_rate: 0.012, // default mock value
+        pii_risk: 0.0 // default mock value
+      };
+
+      if (!payload.id || !payload.name) {
+        throw new Error("Dataset ID and Name are required.");
+      }
+      if (!selectedFile) {
+        throw new Error("Please select a file to import.");
+      }
+
+      // Step 1: Register dataset metadata
+      await registerDataset(payload, workspaceId);
+
+      // Step 2: Upload CSV file
+      await importDatasetFile(payload.id, formData.version.trim(), selectedFile, workspaceId);
+
+      // Reload datasets
+      const res = await getDatasets(workspaceId);
+      setDatasets(res.data);
+      
+      // Auto-select newly imported dataset
+      setSelectedDataset(payload);
+
+      // Reset states
+      setFormData({
+        id: "",
+        name: "",
+        source: "HuggingFace",
+        license: "MIT",
+        version: "1.0"
+      });
+      setSelectedFile(null);
+      setIsModalOpen(false);
+    } catch (err: any) {
+      setImportError(err.message || "Failed to import dataset.");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -44,17 +110,26 @@ export default function DatasetsPage() {
     <ClientLayout>
       <div className="space-y-12">
         {/* Header Title Section */}
-        <div className="relative border-b border-[rgba(255,255,255,0.06)] pb-8">
+        <div className="relative border-b border-[rgba(255,255,255,0.06)] pb-8 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div className="absolute top-[-100px] left-[-50px] w-96 h-96 rounded-full bg-[rgba(139,92,246,0.04)] blur-3xl -z-10"></div>
-          <span className="text-[10px] font-mono tracking-widest text-[#8b5cf6] uppercase block mb-1">
-            DATA PIPELINE
-          </span>
-          <h1 className="text-4xl font-semibold tracking-tight text-white">
-            Dataset Manager
-          </h1>
-          <p className="text-slate-400 text-xs mt-1.5 max-w-xl">
-            Validate schemas, audit evaluation overlap leakage, and scan for privacy restrictions.
-          </p>
+          <div>
+            <span className="text-[10px] font-mono tracking-widest text-[#8b5cf6] uppercase block mb-1">
+              DATA PIPELINE
+            </span>
+            <h1 className="text-4xl font-semibold tracking-tight text-white">
+              Dataset Manager
+            </h1>
+            <p className="text-slate-400 text-xs mt-1.5 max-w-xl">
+              Validate schemas, audit evaluation overlap leakage, and scan for privacy restrictions.
+            </p>
+          </div>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#8b5cf6] hover:bg-[#7c3aed] transition-all rounded-md shadow-[0_0_15px_rgba(139,92,246,0.2)] hover:shadow-[0_0_20px_rgba(139,92,246,0.4)] whitespace-nowrap self-start md:self-end"
+          >
+            <Plus className="w-4 h-4" />
+            Import Dataset
+          </button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -187,6 +262,149 @@ export default function DatasetsPage() {
           </div>
         </div>
       </div>
+
+      {/* Import Dataset Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="relative w-full max-w-lg bg-[#09090e] border border-[rgba(255,255,255,0.08)] rounded-xl shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(255,255,255,0.06)] bg-[#0c0c12]">
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-[#8b5cf6]" />
+                <h3 className="text-sm font-semibold text-white">Import New Dataset</h3>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-500 hover:text-slate-300 transition p-1 hover:bg-slate-900 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleImport} className="p-6 space-y-4">
+              {importError && (
+                <div className="p-3 bg-red-950/20 border border-red-900/30 text-red-400 text-xs rounded font-mono">
+                  {importError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400">Dataset ID (Slug)</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. dataset_custom"
+                    value={formData.id}
+                    onChange={(e) => setFormData({ ...formData, id: e.target.value })}
+                    className="w-full bg-[#05050a] border border-[rgba(255,255,255,0.06)] focus:border-[#8b5cf6] rounded px-3 py-2 text-xs text-white focus:outline-none transition font-mono"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400">Display Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Custom Benchmark"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full bg-[#05050a] border border-[rgba(255,255,255,0.06)] focus:border-[#8b5cf6] rounded px-3 py-2 text-xs text-white focus:outline-none transition"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-2 space-y-1.5">
+                  <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400">Source / Repo</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. HuggingFace gsm8k"
+                    value={formData.source}
+                    onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+                    className="w-full bg-[#05050a] border border-[rgba(255,255,255,0.06)] focus:border-[#8b5cf6] rounded px-3 py-2 text-xs text-white focus:outline-none transition font-mono"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400">Version</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 1.0"
+                    value={formData.version}
+                    onChange={(e) => setFormData({ ...formData, version: e.target.value })}
+                    className="w-full bg-[#05050a] border border-[rgba(255,255,255,0.06)] focus:border-[#8b5cf6] rounded px-3 py-2 text-xs text-white focus:outline-none transition font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400">License Terms</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. MIT, Apache-2.0"
+                  value={formData.license}
+                  onChange={(e) => setFormData({ ...formData, license: e.target.value })}
+                  className="w-full bg-[#05050a] border border-[rgba(255,255,255,0.06)] focus:border-[#8b5cf6] rounded px-3 py-2 text-xs text-white focus:outline-none transition"
+                />
+              </div>
+
+              {/* File Upload Selector */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400">Dataset File (CSV / JSONL)</label>
+                <div className="flex items-center justify-center w-full">
+                  <label className="flex flex-col items-center justify-center w-full h-32 border border-dashed border-[rgba(255,255,255,0.08)] hover:border-[#8b5cf6] bg-[#05050a] hover:bg-[#07070d] rounded-lg cursor-pointer transition">
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center px-4">
+                      <Upload className={`w-8 h-8 ${selectedFile ? 'text-emerald-500' : 'text-slate-500'} mb-2`} />
+                      {selectedFile ? (
+                        <p className="text-xs font-semibold text-emerald-400 font-mono truncate max-w-xs">{selectedFile.name}</p>
+                      ) : (
+                        <>
+                          <p className="text-xs font-semibold text-slate-300">Click to select dataset file</p>
+                          <p className="text-[10px] text-slate-500 mt-1 font-mono">CSV, JSONL, or TSV formats up to 10MB</p>
+                        </>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      required
+                      accept=".csv,.jsonl,.tsv,.txt"
+                      onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-[rgba(255,255,255,0.06)] mt-6">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white bg-[#0e0e15] border border-[rgba(255,255,255,0.05)] hover:border-slate-700 transition rounded"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={importing}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#8b5cf6] hover:bg-[#7c3aed] transition rounded disabled:opacity-50"
+                >
+                  {importing ? (
+                    <>
+                      <div className="w-3.5 h-3.5 rounded-full border border-white/20 border-t-white animate-spin"></div>
+                      Importing...
+                    </>
+                  ) : (
+                    "Import Dataset"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </ClientLayout>
   );
 }
