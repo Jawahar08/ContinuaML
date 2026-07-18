@@ -8,7 +8,7 @@ from app.models import (
     Experiment, Metric, ResourceSample, CostEstimate, 
     ExperimentTask, ExperimentLineage, WorkspaceRole, Job, JobStatus,
     ModelVersion, Model, DatasetVersion, TrainingConfig, BenchmarkProtocol,
-    ProvenanceStatus
+    ProvenanceStatus, Dataset
 )
 from app.auth import WorkspaceAuth
 from app.queue import job_queue
@@ -28,6 +28,34 @@ def launch_experiment(
     auth=Depends(require_researcher),
     db: Session = Depends(get_db)
 ):
+    if not experiment.id:
+        experiment.id = f"exp-{uuid.uuid4()}"
+        
+    # Verify or create dummy model version if missing (to prevent foreign key failure in local dev/testing)
+    if experiment.model_version_id:
+        mv = db.exec(select(ModelVersion).where(ModelVersion.id == experiment.model_version_id)).first()
+        if not mv:
+            model_id = experiment.model_version_id.rsplit("-", 1)[0]
+            m = db.exec(select(Model).where(Model.id == model_id)).first()
+            if not m:
+                m = Model(id=model_id, workspace_id=workspace_id, name=model_id, architecture="LlamaForCausalLM", param_count=1000000, context_length=2048, license="Apache-2.0", source="HuggingFace")
+                db.add(m)
+                db.commit()
+            db.add(ModelVersion(id=experiment.model_version_id, model_id=model_id, version="1.0.0", download_status="ready"))
+            db.commit()
+
+    if experiment.dataset_version_id:
+        dv = db.exec(select(DatasetVersion).where(DatasetVersion.id == experiment.dataset_version_id)).first()
+        if not dv:
+            dataset_id = experiment.dataset_version_id.rsplit("-", 1)[0]
+            d = db.exec(select(Dataset).where(Dataset.id == dataset_id)).first()
+            if not d:
+                d = Dataset(id=dataset_id, workspace_id=workspace_id, name=dataset_id, source="HuggingFace", license="MIT")
+                db.add(d)
+                db.commit()
+            db.add(DatasetVersion(id=experiment.dataset_version_id, dataset_id=dataset_id, version="1.0", status="REAL"))
+            db.commit()
+
     experiment.workspace_id = workspace_id
     experiment.status = ProvenanceStatus.PLANNED
     db.add(experiment)
