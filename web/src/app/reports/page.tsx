@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import ClientLayout from "../client-layout";
-import { Save, Download, Sparkles, Quote } from "lucide-react";
+import { Save, Download, Sparkles, Quote, Copy } from "lucide-react";
 
 export default function ReportsPage() {
   const [title, setTitle] = useState("Mitigating Catastrophic Forgetting in Low-Parameter LLMs");
@@ -21,6 +21,38 @@ export default function ReportsPage() {
 }`
   );
   const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    const content = `\\documentclass{article}
+\\begin{document}
+\\title{${title}}
+\\author{ContinuaML Research Unit}
+
+\\date{\\today}
+\\maketitle
+
+\\begin{abstract}
+${abstract}
+\\end{abstract}
+
+\\section{Introduction}
+Continual learning strategies aim to accumulate domain knowledge sequentially...
+
+\\section{Methodology}
+We leverage Elastic Weight Consolidation using Fisher information approximation...
+
+\\section{Bibliography}
+\\begin{verbatim}
+${bibtex}
+\\end{verbatim}
+
+\\end{document}`;
+
+    navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handleExport = (format: "latex" | "markdown") => {
     let content = "";
@@ -106,6 +138,13 @@ ${bibtex}
             >
               <Save className="w-3.5 h-3.5" />
               <span>{saved ? "Saved Draft" : "Save Draft"}</span>
+            </button>
+            <button
+              onClick={handleCopy}
+              className="btn-secondary px-4 py-2 text-xs font-semibold rounded transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              <span>{copied ? "Copied!" : "Copy LaTeX"}</span>
             </button>
             <button
               onClick={() => handleExport("latex")}
