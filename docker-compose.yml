@@ -3,24 +3,24 @@ version: "3.8"
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: forgetguard-db
+    container_name: continuaml-db
     environment:
-      POSTGRES_USER: forgetguard
-      POSTGRES_PASSWORD: forgetguard_secure_password_99
-      POSTGRES_DB: forgetguard
+      POSTGRES_USER: ${POSTGRES_USER:-continuaml}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-continuaml}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U forgetguard"]
+      test: ["CMD-SHELL", "pg_isready -U continuaml"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: forgetguard-redis
+    container_name: continuaml-redis
     ports:
       - "6379:6379"
     healthcheck:
@@ -31,13 +31,13 @@ services:
 
   minio:
     image: minio/minio:latest
-    container_name: forgetguard-storage
+    container_name: continuaml-storage
     ports:
       - "9000:9000"
       - "9001:9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadminpassword
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
     command: server /data --console-address ":9001"
     volumes:
       - miniodata:/data
@@ -51,11 +51,11 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
-    container_name: forgetguard-api
+    container_name: continuaml-api
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://forgetguard:forgetguard_secure_password_99@postgres:5432/forgetguard
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-continuaml}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-continuaml}
       - REDIS_URL=redis://redis:6379/0
       - STORAGE_DIR=/workspace/data
     depends_on:
@@ -68,10 +68,10 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
-    container_name: forgetguard-worker
+    container_name: continuaml-worker
     command: python -m app.worker
     environment:
-      - DATABASE_URL=postgresql://forgetguard:forgetguard_secure_password_99@postgres:5432/forgetguard
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-continuaml}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-continuaml}
       - REDIS_URL=redis://redis:6379/0
       - STORAGE_DIR=/workspace/data
     depends_on:
@@ -84,7 +84,7 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
-    container_name: forgetguard-web
+    container_name: continuaml-web
     ports:
       - "3000:3000"
     environment:
