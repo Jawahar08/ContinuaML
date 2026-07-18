@@ -23,17 +23,21 @@ export default function ReportsPage() {
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const escapeLatex = (text: string) => {
+    return text.replace(/%/g, "\\%");
+  };
+
   const handleCopy = () => {
     const content = `\\documentclass{article}
 \\begin{document}
-\\title{${title}}
+\\title{${escapeLatex(title)}}
 \\author{ContinuaML Research Unit}
 
 \\date{\\today}
 \\maketitle
 
 \\begin{abstract}
-${abstract}
+${escapeLatex(abstract)}
 \\end{abstract}
 
 \\section{Introduction}
@@ -59,14 +63,14 @@ ${bibtex}
     if (format === "latex") {
       content = `\\documentclass{article}
 \\begin{document}
-\\title{${title}}
+\\title{${escapeLatex(title)}}
 \\author{ContinuaML Research Unit}
 
 \\date{\\today}
 \\maketitle
 
 \\begin{abstract}
-${abstract}
+${escapeLatex(abstract)}
 \\end{abstract}
 
 \\section{Introduction}
