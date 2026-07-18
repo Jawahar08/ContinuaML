@@ -65,13 +65,15 @@ ${bibtex}
 `;
     }
 
-    const dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(content);
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
     const downloadAnchor = document.createElement("a");
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `research-report.${format === "latex" ? "tex" : "md"}`);
+    downloadAnchor.href = url;
+    downloadAnchor.download = `research-report.${format === "latex" ? "tex" : "md"}`;
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
-    downloadAnchor.remove();
+    document.body.removeChild(downloadAnchor);
+    URL.revokeObjectURL(url);
   };
 
   const handleSave = () => {
