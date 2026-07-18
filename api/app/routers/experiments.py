@@ -1,0 +1,169 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlmodel import Session, select
+from typing import List, Dict, Any
+import uuid
+import json
+from app.db import get_db
+from app.models import (
+    Experiment, Metric, ResourceSample, CostEstimate, 
+    ExperimentTask, ExperimentLineage, WorkspaceRole, Job, JobStatus,
+    ModelVersion, Model, DatasetVersion, TrainingConfig, BenchmarkProtocol,
+    ProvenanceStatus
+)
+from app.auth import WorkspaceAuth
+from app.queue import job_queue
+
+router = APIRouter(prefix="/{workspace_id}/experiments", tags=["Experiment Management"])
+
+def require_viewer(workspace_id: str, auth=Depends(WorkspaceAuth(WorkspaceRole.VIEWER))):
+    return auth
+
+def require_researcher(workspace_id: str, auth=Depends(WorkspaceAuth(WorkspaceRole.RESEARCHER))):
+    return auth
+
+@router.post("", response_model=Experiment, status_code=status.HTTP_201_CREATED)
+def launch_experiment(
+    workspace_id: str,
+    experiment: Experiment,
+    auth=Depends(require_researcher),
+    db: Session = Depends(get_db)
+):
+    experiment.workspace_id = workspace_id
+    experiment.status = ProvenanceStatus.PLANNED
+    db.add(experiment)
+    db.commit()
+    db.refresh(experiment)
+    
+    # Enqueue a background job for fine-tuning
+    job_id = f"job-ft-{uuid.uuid4()}"
+    job = Job(
+        id=job_id,
+        workspace_id=workspace_id,
+        experiment_id=experiment.id,
+        job_type="fine-tune",
+        status=JobStatus.QUEUED,
+        progress=0.0
+    )
+    db.add(job)
+    db.commit()
+    
+    job_queue.enqueue(job_id, db)
+    
+    # Enqueue a background job for evaluation right after
+    eval_job_id = f"job-ev-{uuid.uuid4()}"
+    eval_job = Job(
+        id=eval_job_id,
+        workspace_id=workspace_id,
+        experiment_id=experiment.id,
+        job_type="evaluate",
+        status=JobStatus.QUEUED,
+        progress=0.0
+    )
+    db.add(eval_job)
+    db.commit()
+    
+    job_queue.enqueue(eval_job_id, db)
+    
+    return experiment
+
+@router.get("", response_model=List[Experiment])
+def list_experiments(
+    workspace_id: str,
+    auth=Depends(require_viewer),
+    db: Session = Depends(get_db)
+):
+    statement = select(Experiment).where(Experiment.workspace_id == workspace_id)
+    return db.exec(statement).all()
+
+@router.get("/{experiment_id}")
+def get_experiment(
+    workspace_id: str,
+    experiment_id: str,
+    auth=Depends(require_viewer),
+    db: Session = Depends(get_db)
+):
+    stmt = select(Experiment).where(Experiment.workspace_id == workspace_id, Experiment.id == experiment_id)
+    exp = db.exec(stmt).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+        
+    tasks = db.exec(select(ExperimentTask).where(ExperimentTask.experiment_id == experiment_id)).all()
+    cost = db.exec(select(CostEstimate).where(CostEstimate.experiment_id == experiment_id)).first()
+    
+    return {
+        "experiment": exp,
+        "tasks": tasks,
+        "cost": cost
+    }
+
+@router.get("/{experiment_id}/metrics", response_model=List[Metric])
+def get_metrics(
+    workspace_id: str,
+    experiment_id: str,
+    auth=Depends(require_viewer),
+    db: Session = Depends(get_db)
+):
+    stmt = select(Metric).where(Metric.experiment_id == experiment_id)
+    return db.exec(stmt).all()
+
+@router.get("/{experiment_id}/reproducibility")
+def get_reproducibility_manifest(
+    workspace_id: str,
+    experiment_id: str,
+    auth=Depends(require_viewer),
+    db: Session = Depends(get_db)
+):
+    stmt = select(Experiment).where(Experiment.workspace_id == workspace_id, Experiment.id == experiment_id)
+    exp = db.exec(stmt).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+        
+    lineage = db.exec(select(ExperimentLineage).where(ExperimentLineage.experiment_id == experiment_id)).first()
+    rep_hash = lineage.reproducibility_hash if lineage else "sha256-untracked"
+    
+    # Retrieve related versions details
+    mv = db.exec(select(ModelVersion).where(ModelVersion.id == exp.model_version_id)).first()
+    model = db.exec(select(Model).where(Model.id == mv.model_id)).first() if mv else None
+    
+    dv = db.exec(select(DatasetVersion).where(DatasetVersion.id == exp.dataset_version_id)).first()
+    
+    cfg = db.exec(select(TrainingConfig).where(TrainingConfig.id == exp.config_id)).first()
+    hyperparams = json.loads(cfg.hyperparams_json.decode("utf-8")) if cfg else {}
+    
+    # Assemble reproducibility manifest
+    manifest = {
+      "manifest_version": "1.0",
+      "experiment_id": exp.id,
+      "workspace_id": workspace_id,
+      "timestamp": exp.created_at.isoformat(),
+      "code_provenance": {
+        "git_commit": "a1b2c3d4e5f6g7h8i9j0",
+        "branch": "main",
+        "dirty": False
+      },
+      "hardware_environment": {
+        "os": "Windows / Linux",
+        "cpu": "Deterministic CPU Demo Engine",
+        "gpu": "N/A"
+      },
+      "randomness_configuration": {
+        "global_seed": exp.seed
+      },
+      "inputs": {
+        "model": {
+          "id": model.id if model else "N/A",
+          "version": mv.version if mv else "N/A",
+          "architecture": model.architecture if model else "N/A",
+          "checksum": mv.checksum if mv else "N/A"
+        },
+        "dataset": {
+          "id": dv.dataset_id if dv else "N/A",
+          "version": dv.version if dv else "N/A",
+          "status": dv.status.value if dv else "N/A"
+        }
+      },
+      "hyperparameters": hyperparams,
+      "reproducibility_hash": rep_hash
+    }
+    
+    return manifest

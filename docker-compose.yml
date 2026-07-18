@@ -1,0 +1,97 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: forgetguard-db
+    environment:
+      POSTGRES_USER: forgetguard
+      POSTGRES_PASSWORD: forgetguard_secure_password_99
+      POSTGRES_DB: forgetguard
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forgetguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: forgetguard-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: forgetguard-storage
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadminpassword
+    command: server /data --console-address ":9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: forgetguard-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://forgetguard:forgetguard_secure_password_99@postgres:5432/forgetguard
+      - REDIS_URL=redis://redis:6379/0
+      - STORAGE_DIR=/workspace/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: forgetguard-worker
+    command: python -m app.worker
+    environment:
+      - DATABASE_URL=postgresql://forgetguard:forgetguard_secure_password_99@postgres:5432/forgetguard
+      - REDIS_URL=redis://redis:6379/0
+      - STORAGE_DIR=/workspace/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: forgetguard-web
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  miniodata:
