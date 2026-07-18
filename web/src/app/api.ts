@@ -87,6 +87,27 @@ export async function getModels(workspaceId: string = "workspace_default") {
   return fetchFromApi<Model[]>(`/${workspaceId}/models`, DEMO_MODELS);
 }
 
+export async function registerModel(model: Model, workspaceId: string = "workspace_default") {
+  try {
+    const token = localStorage.getItem("token") || "";
+    const res = await fetch(`${API_BASE}/${workspaceId}/models`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(model)
+    });
+    if (!res.ok) throw new Error("API call failed");
+    const json = await res.json();
+    return { data: json as Model, status: "REAL" as const };
+  } catch (err) {
+    console.warn(`API call to register model failed. Simulating in-memory registration.`, err);
+    DEMO_MODELS.push(model);
+    return { data: model, status: "DEMO" as const };
+  }
+}
+
 export async function getDatasets(workspaceId: string = "workspace_default") {
   return fetchFromApi<Dataset[]>(`/${workspaceId}/datasets`, DEMO_DATASETS);
 }
