@@ -12,7 +12,7 @@ from app.models import (
     Job, JobStatus, JobEvent, Log, Experiment, Metric, 
     ProvenanceStatus, DatasetVersion, ContaminationCheck, 
     ResourceSample, CostEstimate, ExperimentTask, ExperimentLineage,
-    Model, ModelVersion, ModelCard, ModelMerge
+    Model, ModelVersion, ModelCard, ModelMerge, SafetyGateEvent
 )
 from app.queue import job_queue
 from app.sandbox import execute_code_sandboxed
@@ -155,6 +155,32 @@ def process_evaluate(job_id: str, db: Session):
         )
         db.add(metric_forgetting)
         job_queue.write_log(job_id, f"Task {task_name} accuracy: {score:.4f} (Forgetting: {forgetting:.4f})")
+        
+        # Check safety gate forgetting threshold
+        if exp.safety_gate_enabled and forgetting > exp.max_forgetting_threshold:
+            event = SafetyGateEvent(
+                workspace_id=exp.workspace_id,
+                experiment_id=exp.id,
+                metric_name=f"forgetting_{task_name}",
+                threshold_value=exp.max_forgetting_threshold,
+                observed_value=forgetting,
+                action_taken="halt_and_rollback"
+            )
+            db.add(event)
+            db.commit()
+            
+            job_queue.write_log(job_id, f"[CRITICAL] Safety Gate Triggered: forgetting on {task_name} was {forgetting:.4f}, which exceeded the limit of {exp.max_forgetting_threshold:.4f}.", "CRITICAL")
+            job_queue.write_log(job_id, "[CRITICAL] Action: halting training and rolling back to previous checkpoint.", "CRITICAL")
+            
+            # Mark job as failed and exit
+            job_queue.update_progress(job_id, 100.0, db)
+            job_queue.transition_job(job_id, JobStatus.FAILED, db, f"Safety Gate Breached: forgetting on {task_name} exceeded threshold")
+            
+            # Also update experiment status to FAILED
+            exp.status = ProvenanceStatus.FAILED
+            db.add(exp)
+            db.commit()
+            return
     
     # Compute Average Accuracy
     avg_accuracy = sum(score for _, score in tasks) / len(tasks)
@@ -165,6 +191,32 @@ def process_evaluate(job_id: str, db: Session):
         step=1
     )
     db.add(avg_metric)
+    db.commit()
+
+    if exp.safety_gate_enabled and avg_accuracy < exp.min_accuracy_threshold:
+        event = SafetyGateEvent(
+            workspace_id=exp.workspace_id,
+            experiment_id=exp.id,
+            metric_name="avg_accuracy",
+            threshold_value=exp.min_accuracy_threshold,
+            observed_value=avg_accuracy,
+            action_taken="halt_and_rollback"
+        )
+        db.add(event)
+        db.commit()
+        
+        job_queue.write_log(job_id, f"[CRITICAL] Safety Gate Triggered: average accuracy {avg_accuracy:.4f} was below the required limit of {exp.min_accuracy_threshold:.4f}.", "CRITICAL")
+        job_queue.write_log(job_id, "[CRITICAL] Action: halting training and rolling back to previous checkpoint.", "CRITICAL")
+        
+        # Mark job as failed and exit
+        job_queue.update_progress(job_id, 100.0, db)
+        job_queue.transition_job(job_id, JobStatus.FAILED, db, "Safety Gate Breached: average accuracy below threshold")
+        
+        # Also update experiment status to FAILED
+        exp.status = ProvenanceStatus.FAILED
+        db.add(exp)
+        db.commit()
+        return
     
     # Record Lineage Reproducibility Manifest hash
     lineage = ExperimentLineage(

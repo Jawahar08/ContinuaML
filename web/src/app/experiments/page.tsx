@@ -23,6 +23,12 @@ export default function ExperimentsPage() {
   const [ewcLambda, setEwcLambda] = useState("100.0");
   const [seed, setSeed] = useState("42");
   
+  // Safety gate states
+  const [safetyGateEnabled, setSafetyGateEnabled] = useState(false);
+  const [maxForgetting, setMaxForgetting] = useState("0.20");
+  const [minAccuracy, setMinAccuracy] = useState("0.50");
+  const [safetyEvents, setSafetyEvents] = useState<any[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState("");
@@ -53,6 +59,30 @@ export default function ExperimentsPage() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    if (selectedExp) {
+      const fetchSafety = async () => {
+        try {
+          const token = localStorage.getItem("token") || "";
+          const res = await fetch(`http://localhost:8000/api/v1/workspace_default/experiments/${selectedExp.id}/safety-events`, {
+            headers: { "Authorization": `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const json = await res.json();
+            setSafetyEvents(json);
+          } else {
+            setSafetyEvents([]);
+          }
+        } catch {
+          setSafetyEvents([]);
+        }
+      };
+      fetchSafety();
+    } else {
+      setSafetyEvents([]);
+    }
+  }, [selectedExp]);
+
   const handleLaunch = async (e: React.FormEvent) => {
     e.preventDefault();
     setLaunching(true);
@@ -66,6 +96,9 @@ export default function ExperimentsPage() {
       config_id: "cfg_default",
       protocol_id: "proto_standard",
       seed: parseInt(seed),
+      safety_gate_enabled: safetyGateEnabled,
+      max_forgetting_threshold: parseFloat(maxForgetting),
+      min_accuracy_threshold: parseFloat(minAccuracy)
     };
 
     try {
@@ -255,7 +288,57 @@ export default function ExperimentsPage() {
                         />
                       </div>
                     )}
+                </div>
+
+                {/* Safety Gate Controls */}
+                <div className="border-t border-[rgba(255,255,255,0.06)] pt-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-500 block uppercase tracking-wider">Enable Safety Gate Auto-Rollback</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={safetyGateEnabled} 
+                        onChange={(e) => setSafetyGateEnabled(e.target.checked)} 
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-950 border border-[rgba(255,255,255,0.06)] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-500 peer-checked:after:bg-[#8b5cf6] after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#8b5cf6]/25 peer-checked:border-[#8b5cf6]"></div>
+                    </label>
                   </div>
+
+                  {safetyGateEnabled && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[9px] uppercase text-slate-500 font-mono">
+                          <span>Max Forgetting</span>
+                          <span className="text-[#8b5cf6]">{Math.round(parseFloat(maxForgetting) * 100)}%</span>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="0.05" 
+                          max="1.0" 
+                          step="0.05"
+                          value={maxForgetting} 
+                          onChange={(e) => setMaxForgetting(e.target.value)}
+                          className="w-full h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-[#8b5cf6]"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[9px] uppercase text-slate-500 font-mono">
+                          <span>Min Accuracy</span>
+                          <span className="text-[#8b5cf6]">{Math.round(parseFloat(minAccuracy) * 100)}%</span>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="0.10" 
+                          max="1.0" 
+                          step="0.05"
+                          value={minAccuracy} 
+                          onChange={(e) => setMinAccuracy(e.target.value)}
+                          className="w-full h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-[#8b5cf6]"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-end gap-3 pt-6">
@@ -334,6 +417,25 @@ export default function ExperimentsPage() {
                     <span>Download Manifest</span>
                   </button>
                 </div>
+
+                {/* Safety Gate Triggered Banner */}
+                {safetyEvents.length > 0 && (
+                  <div className="p-4 bg-red-950/20 border border-red-900/30 text-rose-400 rounded-lg space-y-2 font-mono text-[11px] border-l-4 border-l-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.05)]">
+                    <div className="flex items-center gap-2 text-rose-400 font-bold uppercase tracking-wider">
+                      <span>⚠️ SAFETY GATE AUTOMATIC ROLLBACK TRIGGERED</span>
+                    </div>
+                    {safetyEvents.map((evt, idx) => (
+                      <div key={idx} className="leading-relaxed">
+                        The experiment was halted because the metric <strong className="text-white">{evt.metric_name}</strong> violated safety limits.
+                        <div className="mt-1 flex gap-4 text-slate-500 text-[10px]">
+                          <span>Threshold Limit: {evt.threshold_value}</span>
+                          <span>Observed Value: {evt.observed_value.toFixed(4)}</span>
+                          <span>Action Taken: <span className="text-rose-400 font-semibold">{evt.action_taken}</span></span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Lineage representation */}
                 <div className="space-y-4">

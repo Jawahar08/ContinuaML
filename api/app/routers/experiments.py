@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.encoders import jsonable_encoder
 from sqlmodel import Session, select
 from typing import List, Dict, Any
 import uuid
@@ -21,7 +22,28 @@ def require_viewer(workspace_id: str, auth=Depends(WorkspaceAuth(WorkspaceRole.V
 def require_researcher(workspace_id: str, auth=Depends(WorkspaceAuth(WorkspaceRole.RESEARCHER))):
     return auth
 
-@router.post("", response_model=Experiment, status_code=status.HTTP_201_CREATED)
+def experiment_to_dict(exp: Experiment) -> dict:
+    if not exp:
+        return {}
+    return {
+        "id": exp.id,
+        "workspace_id": exp.workspace_id,
+        "name": exp.name,
+        "model_version_id": exp.model_version_id,
+        "dataset_version_id": exp.dataset_version_id,
+        "strategy_id": exp.strategy_id,
+        "config_id": exp.config_id,
+        "protocol_id": exp.protocol_id,
+        "seed": exp.seed,
+        "status": exp.status,
+        "safety_gate_enabled": exp.safety_gate_enabled,
+        "max_forgetting_threshold": exp.max_forgetting_threshold,
+        "min_accuracy_threshold": exp.min_accuracy_threshold,
+        "created_at": exp.created_at.isoformat() if exp.created_at else None,
+        "completed_at": exp.completed_at.isoformat() if exp.completed_at else None
+    }
+
+@router.post("", response_model=Any, status_code=status.HTTP_201_CREATED)
 def launch_experiment(
     workspace_id: str,
     experiment: Experiment,
@@ -92,18 +114,20 @@ def launch_experiment(
     
     job_queue.enqueue(eval_job_id, db)
     
-    return experiment
+    res = jsonable_encoder(experiment_to_dict(experiment))
+    return res
 
-@router.get("", response_model=List[Experiment])
+@router.get("", response_model=List[Any])
 def list_experiments(
     workspace_id: str,
     auth=Depends(require_viewer),
     db: Session = Depends(get_db)
 ):
     statement = select(Experiment).where(Experiment.workspace_id == workspace_id)
-    return db.exec(statement).all()
+    experiments = db.exec(statement).all()
+    return jsonable_encoder([experiment_to_dict(exp) for exp in experiments])
 
-@router.get("/{experiment_id}")
+@router.get("/{experiment_id}", response_model=Any)
 def get_experiment(
     workspace_id: str,
     experiment_id: str,
@@ -119,9 +143,9 @@ def get_experiment(
     cost = db.exec(select(CostEstimate).where(CostEstimate.experiment_id == experiment_id)).first()
     
     return {
-        "experiment": exp,
-        "tasks": tasks,
-        "cost": cost
+        "experiment": jsonable_encoder(experiment_to_dict(exp)),
+        "tasks": jsonable_encoder([t.dict() for t in tasks]),
+        "cost": jsonable_encoder(cost.dict() if cost else None)
     }
 
 @router.get("/{experiment_id}/metrics", response_model=List[Metric])

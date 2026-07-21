@@ -221,6 +221,9 @@ class Experiment(SQLModel, table=True):
     protocol_id: str = Field(foreign_key="benchmarkprotocol.id")
     seed: int
     status: ProvenanceStatus = Field(default=ProvenanceStatus.PLANNED)
+    safety_gate_enabled: bool = Field(default=False)
+    max_forgetting_threshold: float = Field(default=0.20)
+    min_accuracy_threshold: float = Field(default=0.50)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None
 
@@ -393,3 +396,13 @@ class ModelMerge(SQLModel, table=True):
     job_id: Optional[str] = Field(default=None, foreign_key="job.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None
+
+class SafetyGateEvent(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    workspace_id: str = Field(foreign_key="workspace.id", index=True)
+    experiment_id: str = Field(foreign_key="experiment.id", index=True)
+    metric_name: str  # e.g., "forgetting_score", "avg_accuracy"
+    threshold_value: float
+    observed_value: float
+    action_taken: str  # "halt", "rollback_to_checkpoint"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
