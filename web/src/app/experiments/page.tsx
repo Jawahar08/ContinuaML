@@ -37,6 +37,16 @@ export default function ExperimentsPage() {
   const [carbonAwareEnabled, setCarbonAwareEnabled] = useState(false);
   const [carbonThreshold, setCarbonThreshold] = useState("250");
   const [carbonForecast, setCarbonForecast] = useState<any[]>([]);
+
+  // Dynamic LoRA Router states
+  const [dynamicLoraRouting, setDynamicLoraRouting] = useState(false);
+  const [loraExpertCount, setLoraExpertCount] = useState("4");
+  const [routingEntropy, setRoutingEntropy] = useState("0.75");
+
+  // Active Coreset Replay states
+  const [activeCoresetReplay, setActiveCoresetReplay] = useState(false);
+  const [coresetSize, setCoresetSize] = useState("1000");
+  const [selectionStrategy, setSelectionStrategy] = useState("herding");
   
   const [loading, setLoading] = useState(true);
   const [launching, setLaunching] = useState(false);
@@ -136,7 +146,13 @@ export default function ExperimentsPage() {
       fisher_freezing_enabled: fisherFreezingEnabled,
       fisher_importance_threshold: parseFloat(fisherImportanceThreshold),
       carbon_aware_enabled: carbonAwareEnabled,
-      carbon_intensity_threshold: parseFloat(carbonThreshold)
+      carbon_intensity_threshold: parseFloat(carbonThreshold),
+      dynamic_lora_routing: dynamicLoraRouting,
+      lora_expert_count: parseInt(loraExpertCount),
+      routing_entropy_threshold: parseFloat(routingEntropy),
+      active_coreset_replay: activeCoresetReplay,
+      coreset_size: parseInt(coresetSize),
+      selection_strategy: selectionStrategy
     };
 
     try {
@@ -469,6 +485,110 @@ export default function ExperimentsPage() {
                         </div>
                       </div>
                     </div>
+                </div>
+
+                {/* Dynamic LoRA Routing Controls */}
+                <div className="border-t border-[rgba(255,255,255,0.06)] pt-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] text-slate-500 block uppercase tracking-wider">Enable Dynamic LoRA Routing (Experts)</span>
+                      <span className="text-[9px] text-slate-600 font-normal">Routes representation features dynamically.</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={dynamicLoraRouting} 
+                        onChange={(e) => setDynamicLoraRouting(e.target.checked)} 
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-950 border border-[rgba(255,255,255,0.06)] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-500 peer-checked:after:bg-[#8b5cf6] after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#8b5cf6]/25 peer-checked:border-[#8b5cf6]"></div>
+                    </label>
+                  </div>
+
+                  {dynamicLoraRouting && (
+                    <div className="space-y-3 font-mono">
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[9px] uppercase text-slate-500">
+                          <span>LoRA Expert Adapters</span>
+                          <span className="text-[#8b5cf6] font-bold">{loraExpertCount} Experts</span>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="1" 
+                          max="8" 
+                          step="1"
+                          value={loraExpertCount} 
+                          onChange={(e) => setLoraExpertCount(e.target.value)}
+                          className="w-full h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-[#8b5cf6]"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[9px] uppercase text-slate-500">
+                          <span>Gating Entropy Threshold</span>
+                          <span className="text-[#8b5cf6]">{parseFloat(routingEntropy).toFixed(2)}</span>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="0.10" 
+                          max="0.95" 
+                          step="0.05"
+                          value={routingEntropy} 
+                          onChange={(e) => setRoutingEntropy(e.target.value)}
+                          className="w-full h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-[#8b5cf6]"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Active Coreset Replay Controls */}
+                <div className="border-t border-[rgba(255,255,255,0.06)] pt-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] text-slate-500 block uppercase tracking-wider">Enable Active Coreset Replay</span>
+                      <span className="text-[9px] text-slate-600 font-normal">Downsamples replay buffer using coverage selection.</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={activeCoresetReplay} 
+                        onChange={(e) => setActiveCoresetReplay(e.target.checked)} 
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-950 border border-[rgba(255,255,255,0.06)] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-500 peer-checked:after:bg-[#8b5cf6] after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#8b5cf6]/25 peer-checked:border-[#8b5cf6]"></div>
+                    </label>
+                  </div>
+
+                  {activeCoresetReplay && (
+                    <div className="space-y-3 font-mono text-xs text-slate-400">
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[9px] uppercase text-slate-500">
+                          <span>Coreset Size</span>
+                          <span className="text-[#8b5cf6] font-bold">{coresetSize} Samples</span>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="500" 
+                          max="5000" 
+                          step="250"
+                          value={coresetSize} 
+                          onChange={(e) => setCoresetSize(e.target.value)}
+                          className="w-full h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-[#8b5cf6]"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <span className="block text-[9px] uppercase text-slate-500">Selection Strategy</span>
+                        <select 
+                          value={selectionStrategy} 
+                          onChange={(e) => setSelectionStrategy(e.target.value)}
+                          className="w-full bg-slate-950 border border-[rgba(255,255,255,0.06)] p-2 rounded text-slate-300 font-mono text-xs focus:border-[#8b5cf6]"
+                        >
+                          <option value="herding">Herding (Distribution Mean Match)</option>
+                          <option value="k-center">K-Center Coverage Clustering</option>
+                          <option value="random">Random Sampling</option>
+                        </select>
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -649,6 +769,40 @@ export default function ExperimentsPage() {
                       <div className="p-4 bg-[#07070b] rounded-lg border border-[rgba(255,255,255,0.04)]">
                         <span className="block text-[9px] uppercase text-slate-500 mb-1.5 tracking-wider">Scheduler Mode</span>
                         <span className="text-emerald-400 font-bold uppercase">CARBON-AWARE ACTIVE</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Dynamic LoRA Routing Stats */}
+                {selectedExp.dynamic_lora_routing && (
+                  <div className="space-y-4">
+                    <span className="text-[10px] font-mono uppercase text-slate-500 block tracking-wider">DYNAMIC LORA MIXTURE-OF-EXPERTS ROUTER</span>
+                    <div className="grid grid-cols-2 gap-4 text-xs font-mono">
+                      <div className="p-4 bg-[#07070b] rounded-lg border border-[rgba(255,255,255,0.04)]">
+                        <span className="block text-[9px] uppercase text-slate-500 mb-1.5 tracking-wider">Expert Count</span>
+                        <span className="text-slate-200">{selectedExp.lora_expert_count} Adapters</span>
+                      </div>
+                      <div className="p-4 bg-[#07070b] rounded-lg border border-[rgba(255,255,255,0.04)]">
+                        <span className="block text-[9px] uppercase text-slate-500 mb-1.5 tracking-wider">Entropy Limit Threshold</span>
+                        <span className="text-[#8b5cf6] font-bold">{selectedExp.routing_entropy_threshold}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Active Coreset Replay Stats */}
+                {selectedExp.active_coreset_replay && (
+                  <div className="space-y-4">
+                    <span className="text-[10px] font-mono uppercase text-slate-500 block tracking-wider">ACTIVE CORESET MEMORY REPLAY BUFFER</span>
+                    <div className="grid grid-cols-2 gap-4 text-xs font-mono">
+                      <div className="p-4 bg-[#07070b] rounded-lg border border-[rgba(255,255,255,0.04)]">
+                        <span className="block text-[9px] uppercase text-slate-500 mb-1.5 tracking-wider">Coreset Buffer Size</span>
+                        <span className="text-slate-200">{selectedExp.coreset_size} Exemplars</span>
+                      </div>
+                      <div className="p-4 bg-[#07070b] rounded-lg border border-[rgba(255,255,255,0.04)]">
+                        <span className="block text-[9px] uppercase text-slate-500 mb-1.5 tracking-wider">Selection Strategy</span>
+                        <span className="text-[#8b5cf6] font-bold uppercase">{selectedExp.selection_strategy}</span>
                       </div>
                     </div>
                   </div>

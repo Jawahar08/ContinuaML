@@ -44,6 +44,12 @@ def experiment_to_dict(exp: Experiment) -> dict:
         "frozen_param_count": exp.frozen_param_count,
         "carbon_aware_enabled": exp.carbon_aware_enabled,
         "carbon_intensity_threshold": exp.carbon_intensity_threshold,
+        "dynamic_lora_routing": exp.dynamic_lora_routing,
+        "lora_expert_count": exp.lora_expert_count,
+        "routing_entropy_threshold": exp.routing_entropy_threshold,
+        "active_coreset_replay": exp.active_coreset_replay,
+        "coreset_size": exp.coreset_size,
+        "selection_strategy": exp.selection_strategy,
         "created_at": exp.created_at.isoformat() if exp.created_at else None,
         "completed_at": exp.completed_at.isoformat() if exp.completed_at else None
     }

@@ -229,6 +229,12 @@ class Experiment(SQLModel, table=True):
     frozen_param_count: Optional[int] = Field(default=None)
     carbon_aware_enabled: bool = Field(default=False)
     carbon_intensity_threshold: float = Field(default=250.0)
+    dynamic_lora_routing: bool = Field(default=False)
+    lora_expert_count: int = Field(default=4)
+    routing_entropy_threshold: float = Field(default=0.75)
+    active_coreset_replay: bool = Field(default=False)
+    coreset_size: int = Field(default=1000)
+    selection_strategy: str = Field(default="herding")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None
 

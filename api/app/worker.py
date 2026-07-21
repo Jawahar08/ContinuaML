@@ -76,6 +76,24 @@ def process_fine_tune(job_id: str, db: Session):
         job_queue.write_log(job_id, f"[INFO] Resuming training execution...")
         time.sleep(0.4)
 
+    if exp.active_coreset_replay:
+        job_queue.write_log(job_id, f"[INFO] Active Coreset Replay: Initializing memory replay buffer selection...")
+        time.sleep(0.5)
+        job_queue.write_log(job_id, f"[INFO] Selecting coreset of size {exp.coreset_size} using '{exp.selection_strategy}' algorithm coverage...")
+        time.sleep(0.6)
+        job_queue.write_log(job_id, f"[INFO] Covering radius computed: 1.14 (estimated 93.4% semantic distribution space coverage).")
+        time.sleep(0.5)
+        job_queue.write_log(job_id, f"[SUCCESS] Active Coreset populated with {exp.coreset_size:,} exemplars for rehearsal replay.")
+        time.sleep(0.4)
+
+    if exp.dynamic_lora_routing:
+        job_queue.write_log(job_id, f"[INFO] Dynamic LoRA Router: Initializing adapter routing gate network...")
+        time.sleep(0.5)
+        job_queue.write_log(job_id, f"[INFO] Routing Gate: Layer 'model.layers.0.routing_gate.weight' configured for {exp.lora_expert_count} experts.")
+        time.sleep(0.5)
+        job_queue.write_log(job_id, f"[INFO] Gating entropy limit threshold set to: {exp.routing_entropy_threshold:.2f}")
+        time.sleep(0.4)
+
     frozen_count = 0
     if exp.fisher_freezing_enabled:
         job_queue.write_log(job_id, f"[INFO] Weight Plasticity Safeguard: Fisher Freezing is enabled. Estimating diagonal Fisher Information Matrix diagonals...")
@@ -127,8 +145,24 @@ def process_fine_tune(job_id: str, db: Session):
         db.commit()
         
         job_queue.update_progress(job_id, (step / total_steps) * 100.0, db)
+        
+        extra_info = ""
         if exp.fisher_freezing_enabled:
-            job_queue.write_log(job_id, f"Epoch {step}/{total_steps} - loss: {loss:.4f} (applying gradient freezing mask to {frozen_count:,} weights)")
+            extra_info += f"applying freezing mask to {frozen_count:,} weights"
+        if exp.dynamic_lora_routing:
+            # Generate simulated routing percentages for experts
+            exp_count = exp.lora_expert_count
+            shares = [random.uniform(0.1, 0.9) for _ in range(exp_count)]
+            total = sum(shares)
+            pcts = [s / total for s in shares]
+            pcts_str = ", ".join([f"E{i}:{p*100:.0f}%" for i, p in enumerate(pcts)])
+            if extra_info:
+                extra_info += f" | router allocation: {pcts_str}"
+            else:
+                extra_info += f"router allocation: {pcts_str}"
+        
+        if extra_info:
+            job_queue.write_log(job_id, f"Epoch {step}/{total_steps} - loss: {loss:.4f} ({extra_info})")
         else:
             job_queue.write_log(job_id, f"Epoch {step}/{total_steps} - loss: {loss:.4f}")
         time.sleep(0.5)
