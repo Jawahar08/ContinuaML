@@ -3,7 +3,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.db import init_db
 from app.config import settings
-from app.routers import auth, models, datasets, plans, experiments, jobs, reports, safety
+from app.routers import auth, models, datasets, plans, experiments, jobs, reports, safety, carbon
 from app.worker import start_background_worker_thread
 
 # 1. Initialize FastAPI App
@@ -45,6 +45,7 @@ app.include_router(experiments.router, prefix="/api/v1")
 app.include_router(jobs.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(safety.router, prefix="/api/v1")
+app.include_router(carbon.router, prefix="/api/v1")
 
 # 5. Startup Events
 @app.on_event("startup")

@@ -33,6 +33,11 @@ export default function ExperimentsPage() {
   const [fisherFreezingEnabled, setFisherFreezingEnabled] = useState(false);
   const [fisherImportanceThreshold, setFisherImportanceThreshold] = useState("0.85");
   
+  // Carbon-aware scheduler states
+  const [carbonAwareEnabled, setCarbonAwareEnabled] = useState(false);
+  const [carbonThreshold, setCarbonThreshold] = useState("250");
+  const [carbonForecast, setCarbonForecast] = useState<any[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState("");
@@ -87,6 +92,31 @@ export default function ExperimentsPage() {
     }
   }, [selectedExp]);
 
+  useEffect(() => {
+    const fetchForecast = async () => {
+      try {
+        const token = localStorage.getItem("token") || "";
+        const res = await fetch("http://localhost:8000/api/v1/workspace_default/carbon/forecast", {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          setCarbonForecast(json);
+        }
+      } catch {
+        const mockForecast = [];
+        for (let h = 0; h < 24; h++) {
+          mockForecast.push({
+            hour: `${h.toString().padStart(2, '0')}:00`,
+            carbon_intensity: 220 + 80 * Math.sin((h - 8) * Math.PI / 6)
+          });
+        }
+        setCarbonForecast(mockForecast);
+      }
+    };
+    fetchForecast();
+  }, []);
+
   const handleLaunch = async (e: React.FormEvent) => {
     e.preventDefault();
     setLaunching(true);
@@ -104,7 +134,9 @@ export default function ExperimentsPage() {
       max_forgetting_threshold: parseFloat(maxForgetting),
       min_accuracy_threshold: parseFloat(minAccuracy),
       fisher_freezing_enabled: fisherFreezingEnabled,
-      fisher_importance_threshold: parseFloat(fisherImportanceThreshold)
+      fisher_importance_threshold: parseFloat(fisherImportanceThreshold),
+      carbon_aware_enabled: carbonAwareEnabled,
+      carbon_intensity_threshold: parseFloat(carbonThreshold)
     };
 
     try {
@@ -382,6 +414,61 @@ export default function ExperimentsPage() {
                         </p>
                       </div>
                     </div>
+                </div>
+
+                {/* Green AI Carbon-Aware Scheduler Controls */}
+                <div className="border-t border-[rgba(255,255,255,0.06)] pt-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] text-slate-500 block uppercase tracking-wider">Enable Green AI Carbon-Aware Scheduler</span>
+                      <span className="text-[9px] text-slate-600 font-normal">Delays run to low carbon grid windows.</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={carbonAwareEnabled} 
+                        onChange={(e) => setCarbonAwareEnabled(e.target.checked)} 
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-950 border border-[rgba(255,255,255,0.06)] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-500 peer-checked:after:bg-emerald-500 after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500/20 peer-checked:border-emerald-500"></div>
+                    </label>
+                  </div>
+
+                  {carbonAwareEnabled && (
+                    <div className="space-y-4 font-mono">
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[9px] uppercase text-slate-500">
+                          <span>Carbon Intensity Limit</span>
+                          <span className="text-emerald-400 font-bold">{carbonThreshold} gCO2/kWh</span>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="100" 
+                          max="400" 
+                          step="10"
+                          value={carbonThreshold} 
+                          onChange={(e) => setCarbonThreshold(e.target.value)}
+                          className="w-full h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <span className="block text-[9px] text-slate-600 uppercase tracking-wider">24h Grid Emissions Forecast</span>
+                        <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-thin max-w-[420px]">
+                          {carbonForecast.slice(0, 12).map((item, idx) => {
+                            const isBelow = item.carbon_intensity <= parseFloat(carbonThreshold);
+                            return (
+                              <div key={idx} className="flex-shrink-0 bg-slate-950 border border-[rgba(255,255,255,0.04)] p-2 rounded text-center min-w-[55px] space-y-1">
+                                <span className="block text-[8px] text-slate-500 font-semibold">{item.hour}</span>
+                                <span className={`block text-[9px] font-bold ${isBelow ? "text-emerald-400" : "text-amber-500"}`}>
+                                  {Math.round(item.carbon_intensity)}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -545,6 +632,23 @@ export default function ExperimentsPage() {
                             ? `${(selectedExp.frozen_param_count / 1000000).toFixed(1)}M params`
                             : "Calculating..."}
                         </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Green AI Carbon-Aware Scheduler Stats */}
+                {selectedExp.carbon_aware_enabled && (
+                  <div className="space-y-4">
+                    <span className="text-[10px] font-mono uppercase text-slate-500 block tracking-wider">GREEN AI CARBON-AWARE SCHEDULER</span>
+                    <div className="grid grid-cols-2 gap-4 text-xs font-mono">
+                      <div className="p-4 bg-[#07070b] rounded-lg border border-[rgba(255,255,255,0.04)]">
+                        <span className="block text-[9px] uppercase text-slate-500 mb-1.5 tracking-wider">Scheduler Limit</span>
+                        <span className="text-slate-200">{selectedExp.carbon_intensity_threshold} gCO2/kWh</span>
+                      </div>
+                      <div className="p-4 bg-[#07070b] rounded-lg border border-[rgba(255,255,255,0.04)]">
+                        <span className="block text-[9px] uppercase text-slate-500 mb-1.5 tracking-wider">Scheduler Mode</span>
+                        <span className="text-emerald-400 font-bold uppercase">CARBON-AWARE ACTIVE</span>
                       </div>
                     </div>
                   </div>

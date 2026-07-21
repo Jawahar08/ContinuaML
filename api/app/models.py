@@ -227,6 +227,8 @@ class Experiment(SQLModel, table=True):
     fisher_freezing_enabled: bool = Field(default=False)
     fisher_importance_threshold: float = Field(default=0.85)
     frozen_param_count: Optional[int] = Field(default=None)
+    carbon_aware_enabled: bool = Field(default=False)
+    carbon_intensity_threshold: float = Field(default=250.0)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None
 

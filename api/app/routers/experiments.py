@@ -42,6 +42,8 @@ def experiment_to_dict(exp: Experiment) -> dict:
         "fisher_freezing_enabled": exp.fisher_freezing_enabled,
         "fisher_importance_threshold": exp.fisher_importance_threshold,
         "frozen_param_count": exp.frozen_param_count,
+        "carbon_aware_enabled": exp.carbon_aware_enabled,
+        "carbon_intensity_threshold": exp.carbon_intensity_threshold,
         "created_at": exp.created_at.isoformat() if exp.created_at else None,
         "completed_at": exp.completed_at.isoformat() if exp.completed_at else None
     }
