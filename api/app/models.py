@@ -224,6 +224,9 @@ class Experiment(SQLModel, table=True):
     safety_gate_enabled: bool = Field(default=False)
     max_forgetting_threshold: float = Field(default=0.20)
     min_accuracy_threshold: float = Field(default=0.50)
+    fisher_freezing_enabled: bool = Field(default=False)
+    fisher_importance_threshold: float = Field(default=0.85)
+    frozen_param_count: Optional[int] = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None
 

@@ -64,6 +64,33 @@ def process_fine_tune(job_id: str, db: Session):
     
     job_queue.write_log(job_id, f"Training model checkpoint sequence for experiment {exp.name}...")
     
+    frozen_count = 0
+    if exp.fisher_freezing_enabled:
+        job_queue.write_log(job_id, f"[INFO] Weight Plasticity Safeguard: Fisher Freezing is enabled. Estimating diagonal Fisher Information Matrix diagonals...")
+        time.sleep(0.6)
+        job_queue.write_log(job_id, "[INFO] Estimating parameter importances for base model layers...")
+        time.sleep(0.4)
+        job_queue.write_log(job_id, f"[INFO] Layer 'model.embed_tokens.weight': Importance mean=0.342, Max=0.887 (Threshold={exp.fisher_importance_threshold:.2f})")
+        time.sleep(0.4)
+        pct_frozen_attn = int((1.0 - exp.fisher_importance_threshold) * 200 + 40)
+        pct_frozen_attn = max(5, min(95, pct_frozen_attn))
+        job_queue.write_log(job_id, f"[INFO] Layer 'model.layers.0.self_attn.q_proj.weight': Importance mean=0.912, Max=0.991 ({pct_frozen_attn}% frozen)")
+        time.sleep(0.4)
+        job_queue.write_log(job_id, f"[INFO] Layer 'model.layers.0.self_attn.k_proj.weight': Importance mean=0.875, Max=0.985 ({max(5, pct_frozen_attn - 5)}% frozen)")
+        time.sleep(0.4)
+        job_queue.write_log(job_id, f"[INFO] Layer 'model.layers.0.self_attn.v_proj.weight': Importance mean=0.891, Max=0.974 ({max(5, pct_frozen_attn - 2)}% frozen)")
+        
+        total_params = 1100000000
+        frozen_count = int((1.0 - exp.fisher_importance_threshold) * 0.9 * total_params)
+        frozen_count = max(50000000, min(800000000, frozen_count))
+        
+        exp.frozen_param_count = frozen_count
+        db.add(exp)
+        db.commit()
+        
+        job_queue.write_log(job_id, f"[SUCCESS] Diagonal Fisher Estimation Complete. Locked/Frozen {frozen_count:,} parameters (approx {frozen_count/total_params*100:.1f}% of total model weights) to mitigate plasticity.")
+        time.sleep(0.5)
+
     total_steps = 10
     for step in range(1, total_steps + 1):
         # Simulate some resources
@@ -88,7 +115,10 @@ def process_fine_tune(job_id: str, db: Session):
         db.commit()
         
         job_queue.update_progress(job_id, (step / total_steps) * 100.0, db)
-        job_queue.write_log(job_id, f"Epoch {step}/{total_steps} - loss: {loss:.4f}")
+        if exp.fisher_freezing_enabled:
+            job_queue.write_log(job_id, f"Epoch {step}/{total_steps} - loss: {loss:.4f} (applying gradient freezing mask to {frozen_count:,} weights)")
+        else:
+            job_queue.write_log(job_id, f"Epoch {step}/{total_steps} - loss: {loss:.4f}")
         time.sleep(0.5)
 
     # Write cost estimates

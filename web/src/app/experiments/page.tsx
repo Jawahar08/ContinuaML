@@ -29,6 +29,10 @@ export default function ExperimentsPage() {
   const [minAccuracy, setMinAccuracy] = useState("0.50");
   const [safetyEvents, setSafetyEvents] = useState<any[]>([]);
   
+  // Fisher freezing states
+  const [fisherFreezingEnabled, setFisherFreezingEnabled] = useState(false);
+  const [fisherImportanceThreshold, setFisherImportanceThreshold] = useState("0.85");
+  
   const [loading, setLoading] = useState(true);
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState("");
@@ -98,7 +102,9 @@ export default function ExperimentsPage() {
       seed: parseInt(seed),
       safety_gate_enabled: safetyGateEnabled,
       max_forgetting_threshold: parseFloat(maxForgetting),
-      min_accuracy_threshold: parseFloat(minAccuracy)
+      min_accuracy_threshold: parseFloat(minAccuracy),
+      fisher_freezing_enabled: fisherFreezingEnabled,
+      fisher_importance_threshold: parseFloat(fisherImportanceThreshold)
     };
 
     try {
@@ -338,6 +344,44 @@ export default function ExperimentsPage() {
                         />
                       </div>
                     </div>
+                </div>
+
+                {/* Weight Plasticity / Fisher Freezing Controls */}
+                <div className="border-t border-[rgba(255,255,255,0.06)] pt-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-500 block uppercase tracking-wider">Enable Fisher Freezing (Weight Plasticity)</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={fisherFreezingEnabled} 
+                        onChange={(e) => setFisherFreezingEnabled(e.target.checked)} 
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-950 border border-[rgba(255,255,255,0.06)] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-500 peer-checked:after:bg-[#8b5cf6] after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#8b5cf6]/25 peer-checked:border-[#8b5cf6]"></div>
+                    </label>
+                  </div>
+
+                  {fisherFreezingEnabled && (
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[9px] uppercase text-slate-500 font-mono">
+                          <span>Fisher Importance Threshold</span>
+                          <span className="text-[#8b5cf6]">{Math.round(parseFloat(fisherImportanceThreshold) * 100)}%</span>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="0.50" 
+                          max="0.99" 
+                          step="0.01"
+                          value={fisherImportanceThreshold} 
+                          onChange={(e) => setFisherImportanceThreshold(e.target.value)}
+                          className="w-full h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-[#8b5cf6]"
+                        />
+                        <p className="text-[9px] text-slate-500 font-normal leading-relaxed">
+                          Parameters with Fisher Information importance scores above this percentile will be frozen to mitigate catastrophic forgetting.
+                        </p>
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -479,6 +523,27 @@ export default function ExperimentsPage() {
                         <span className="block text-[9px] uppercase text-slate-500 font-mono tracking-wider">Forgetting Score</span>
                         <span className="text-base font-bold mt-1.5 block font-mono text-rose-400">
                           {(selectedExp.forgetting_score || 0 * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Weight Plasticity / Fisher Freezing Stats */}
+                {selectedExp.fisher_freezing_enabled && (
+                  <div className="space-y-4">
+                    <span className="text-[10px] font-mono uppercase text-slate-500 block tracking-wider">WEIGHT PLASTICITY SAFEGUARD (FISHER FREEZING)</span>
+                    <div className="grid grid-cols-2 gap-4 text-xs font-mono">
+                      <div className="p-4 bg-[#07070b] rounded-lg border border-[rgba(255,255,255,0.04)]">
+                        <span className="block text-[9px] uppercase text-slate-500 mb-1.5 tracking-wider">Fisher Importance Threshold</span>
+                        <span className="text-slate-200">{(selectedExp.fisher_importance_threshold * 100).toFixed(0)}%</span>
+                      </div>
+                      <div className="p-4 bg-[#07070b] rounded-lg border border-[rgba(255,255,255,0.04)]">
+                        <span className="block text-[9px] uppercase text-slate-500 mb-1.5 tracking-wider">Frozen Parameters</span>
+                        <span className="text-[#8b5cf6] font-bold">
+                          {selectedExp.frozen_param_count 
+                            ? `${(selectedExp.frozen_param_count / 1000000).toFixed(1)}M params`
+                            : "Calculating..."}
                         </span>
                       </div>
                     </div>

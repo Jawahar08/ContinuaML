@@ -39,6 +39,9 @@ def experiment_to_dict(exp: Experiment) -> dict:
         "safety_gate_enabled": exp.safety_gate_enabled,
         "max_forgetting_threshold": exp.max_forgetting_threshold,
         "min_accuracy_threshold": exp.min_accuracy_threshold,
+        "fisher_freezing_enabled": exp.fisher_freezing_enabled,
+        "fisher_importance_threshold": exp.fisher_importance_threshold,
+        "frozen_param_count": exp.frozen_param_count,
         "created_at": exp.created_at.isoformat() if exp.created_at else None,
         "completed_at": exp.completed_at.isoformat() if exp.completed_at else None
     }
