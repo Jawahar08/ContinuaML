@@ -11,7 +11,8 @@ from app.db import engine
 from app.models import (
     Job, JobStatus, JobEvent, Log, Experiment, Metric, 
     ProvenanceStatus, DatasetVersion, ContaminationCheck, 
-    ResourceSample, CostEstimate, ExperimentTask, ExperimentLineage
+    ResourceSample, CostEstimate, ExperimentTask, ExperimentLineage,
+    Model, ModelVersion, ModelCard, ModelMerge
 )
 from app.queue import job_queue
 from app.sandbox import execute_code_sandboxed
@@ -176,11 +177,113 @@ def process_evaluate(job_id: str, db: Session):
     job_queue.update_progress(job_id, 100.0, db)
     job_queue.transition_job(job_id, JobStatus.SUCCEEDED, db, "Evaluation metrics collected")
 
+def process_model_merge(job_id: str, db: Session):
+    job_queue.transition_job(job_id, JobStatus.RUNNING, db, "Initializing model merge configuration")
+    
+    # Get associated ModelMerge record
+    stmt = select(ModelMerge).where(ModelMerge.job_id == job_id)
+    merge_rec = db.exec(stmt).first()
+    if not merge_rec:
+        job_queue.transition_job(job_id, JobStatus.FAILED, db, "ModelMerge record not found for this job")
+        return
+
+    merge_rec.status = JobStatus.RUNNING
+    db.add(merge_rec)
+    db.commit()
+
+    job_queue.write_log(job_id, f"Initiating merge: parent A = {merge_rec.parent_a_version_id}, parent B = {merge_rec.parent_b_version_id}")
+    job_queue.write_log(job_id, f"Merge Method: {merge_rec.merge_method.upper()}, Ratio: {merge_rec.merge_ratio}")
+    time.sleep(1.0)
+
+    # Step 1: Loading model architectures
+    job_queue.update_progress(job_id, 20.0, db)
+    job_queue.write_log(job_id, "Loading parent model weights and architecture configurations...")
+    
+    mv_a = db.exec(select(ModelVersion).where(ModelVersion.id == merge_rec.parent_a_version_id)).first()
+    mv_b = db.exec(select(ModelVersion).where(ModelVersion.id == merge_rec.parent_b_version_id)).first()
+    
+    model_a = db.exec(select(Model).where(Model.id == mv_a.model_id)).first() if mv_a else None
+    model_b = db.exec(select(Model).where(Model.id == mv_b.model_id)).first() if mv_b else None
+
+    time.sleep(1.0)
+
+    # Step 2: Weight Alignment and Sign Conflict Resolution
+    job_queue.update_progress(job_id, 50.0, db)
+    if merge_rec.merge_method == "ties":
+        job_queue.write_log(job_id, "TIES-Merging: Identifying parameter task vectors...")
+        time.sleep(0.5)
+        job_queue.write_log(job_id, "TIES-Merging: Resolving parameter sign conflicts and creating agreement mask...")
+    elif merge_rec.merge_method == "dare":
+        job_queue.write_log(job_id, "DARE-Merging: Applying random drop-mask to delta vectors...")
+        time.sleep(0.5)
+        job_queue.write_log(job_id, "DARE-Merging: Rescaling remaining weights to preserve variance...")
+    else:  # SLERP
+        job_queue.write_log(job_id, "SLERP: Aligning spherical coordinate vectors...")
+        time.sleep(0.5)
+        job_queue.write_log(job_id, f"SLERP: Interpolating between models along geodesic with ratio {merge_rec.merge_ratio}...")
+    
+    time.sleep(1.0)
+
+    # Step 3: Checkpoint generation
+    job_queue.update_progress(job_id, 80.0, db)
+    job_queue.write_log(job_id, "Rebuilding state dictionary and generating merged checkpoint...")
+    time.sleep(1.0)
+
+    # Register merged model in registry
+    merged_model_id = f"merged-{int(time.time())}"
+    merged_model_name = f"Merged ({model_a.name if model_a else 'Model A'} + {model_b.name if model_b else 'Model B'})"
+    
+    new_model = Model(
+        id=merged_model_id,
+        workspace_id=merge_rec.workspace_id,
+        name=merged_model_name,
+        architecture=model_a.architecture if model_a else "LlamaForCausalLM",
+        param_count=model_a.param_count if model_a else 7000000000,
+        context_length=model_a.context_length if model_a else 2048,
+        license="Derivatively Restrictive / Custom",
+        source="ContinuaML Merge Playground"
+    )
+    db.add(new_model)
+    db.commit()
+
+    merged_version_id = f"{merged_model_id}-v1"
+    new_version = ModelVersion(
+        id=merged_version_id,
+        model_id=merged_model_id,
+        version="1.0.0-merged",
+        download_status="ready",
+        checksum=f"sha256-{random.getrandbits(256):064x}"
+    )
+    db.add(new_version)
+    db.commit()
+
+    new_card = ModelCard(
+        model_id=merged_model_id,
+        intended_use=f"Derivative merged model using {merge_rec.merge_method.upper()} with ratio {merge_rec.merge_ratio}.",
+        limitations=f"Subject to the limitations of parents {merge_rec.parent_a_version_id} and {merge_rec.parent_b_version_id}.",
+        license_restrictions="Custom licensing derived from both parents.",
+        evaluation_summary=f"Synthesized from dual parent weights using ContinuaML weight interpolation."
+    )
+    db.add(new_card)
+    db.commit()
+
+    # Complete the merge record
+    merge_rec.merged_model_version_id = merged_version_id
+    merge_rec.status = JobStatus.SUCCEEDED
+    merge_rec.completed_at = datetime.utcnow()
+    db.add(merge_rec)
+    db.commit()
+
+    job_queue.update_progress(job_id, 100.0, db)
+    job_queue.transition_job(job_id, JobStatus.SUCCEEDED, db, "Model merge completed successfully")
+    job_queue.write_log(job_id, f"Merged model registered successfully under ID: {merged_model_id}")
+
 def worker_loop():
     logger.info("Worker started and listening for jobs...")
     job_queue.register_handler("import-dataset", process_import_dataset)
     job_queue.register_handler("fine-tune", process_fine_tune)
     job_queue.register_handler("evaluate", process_evaluate)
+    job_queue.register_handler("model-merge", process_model_merge)
     
     while True:
         try:

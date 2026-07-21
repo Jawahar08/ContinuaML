@@ -10,20 +10,20 @@ class Settings:
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours for dev convenience
     
+    # Dynamic defaults for workspace
+    _api_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    _workspace_dir = os.path.dirname(_api_dir)
+    _default_db = f"sqlite:///{os.path.join(_workspace_dir, 'continuaml.db').replace('\\', '/')}"
+    _default_storage = os.path.join(_workspace_dir, "data").replace("\\", "/")
+
     # Database URL: defaults to SQLite inside workspace
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL", 
-        "sqlite:///c:/Users/cjawa/Documents/Codex/2026-07-18/gi/continuaml.db"
-    )
+    DATABASE_URL: str = os.getenv("DATABASE_URL", _default_db)
     
     # Redis URL for job worker coordination
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     
     # Storage Directory for datasets/checkpoints/artifacts
-    STORAGE_DIR: str = os.getenv(
-        "STORAGE_DIR", 
-        "c:/Users/cjawa/Documents/Codex/2026-07-18/gi/data"
-    )
+    STORAGE_DIR: str = os.getenv("STORAGE_DIR", _default_storage)
     
     # Code Sandbox boundaries
     SANDBOX_TIMEOUT_SEC: int = int(os.getenv("SANDBOX_TIMEOUT_SEC", "5"))

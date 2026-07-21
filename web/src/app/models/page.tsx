@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from "react";
 import ClientLayout from "../client-layout";
 import { getModels, registerModel, Model } from "../api";
-import { Brain, FileText, ShieldCheck, Plus, X } from "lucide-react";
+import { Brain, FileText, ShieldCheck, Plus, X, GitMerge } from "lucide-react";
+import Link from "next/link";
 
 export default function ModelsPage() {
   const [models, setModels] = useState<Model[]>([]);
@@ -117,13 +118,22 @@ export default function ModelsPage() {
               Governance, specifications, licensing, and metadata cards for registered causal language models.
             </p>
           </div>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#8b5cf6] hover:bg-[#7c3aed] transition-all rounded-md shadow-[0_0_15px_rgba(139,92,246,0.2)] hover:shadow-[0_0_20px_rgba(139,92,246,0.4)] whitespace-nowrap self-start md:self-end"
-          >
-            <Plus className="w-4 h-4" />
-            Register Model
-          </button>
+          <div className="flex gap-3 self-start md:self-end">
+            <Link
+              href="/models/merge"
+              className="flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-[#0e0e15] border border-[rgba(255,255,255,0.05)] hover:border-slate-700 hover:bg-slate-900/60 transition-all rounded-md whitespace-nowrap"
+            >
+              <GitMerge className="w-4 h-4 text-[#8b5cf6]" />
+              Merging Playground
+            </Link>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#8b5cf6] hover:bg-[#7c3aed] transition-all rounded-md shadow-[0_0_15px_rgba(139,92,246,0.2)] hover:shadow-[0_0_20px_rgba(139,92,246,0.4)] whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              Register Model
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

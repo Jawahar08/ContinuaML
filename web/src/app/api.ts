@@ -216,3 +216,86 @@ export async function signup(email: string, password: string) {
   return { data };
 }
 
+export interface ModelMerge {
+  id?: string;
+  name: string;
+  parent_a_version_id: string;
+  parent_b_version_id: string;
+  merged_model_version_id?: string;
+  merge_method: string;
+  merge_ratio: number;
+  status?: string;
+  job_id?: string;
+  created_at?: string;
+  completed_at?: string;
+}
+
+export const DEMO_MERGES: ModelMerge[] = [];
+
+export async function mergeModels(mergeData: ModelMerge, workspaceId: string = "workspace_default") {
+  try {
+    const token = localStorage.getItem("token") || "";
+    const res = await fetch(`${API_BASE}/${workspaceId}/models/merge`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(mergeData)
+    });
+    if (!res.ok) throw new Error("API call failed");
+    const json = await res.json();
+    return { data: json as ModelMerge, status: "REAL" as const };
+  } catch (err) {
+    console.warn("API mergeModels failed. Falling back to demo.", err);
+    const mockMerge = {
+      ...mergeData,
+      id: `merge-mock-${Date.now()}`,
+      status: "queued" as any,
+      job_id: `job-merge-mock-${Date.now()}`,
+      created_at: new Date().toISOString()
+    };
+    DEMO_MERGES.push(mockMerge);
+    return { data: mockMerge, status: "DEMO" as const };
+  }
+}
+
+export async function getMerge(mergeId: string, workspaceId: string = "workspace_default") {
+  try {
+    const token = localStorage.getItem("token") || "";
+    const res = await fetch(`${API_BASE}/${workspaceId}/models/merges/${mergeId}`, {
+      headers: {
+        "Authorization": `Bearer ${token}`
+      }
+    });
+    if (!res.ok) throw new Error("API call failed");
+    const json = await res.json();
+    return { data: json as { merge: ModelMerge; logs: any[] }, status: "REAL" as const };
+  } catch (err) {
+    console.warn("API getMerge failed. Falling back to demo.", err);
+    const merge = DEMO_MERGES.find(m => m.id === mergeId) || {
+      id: mergeId,
+      name: "Mock Merge",
+      parent_a_version_id: "tinyllama-1.1b-v1",
+      parent_b_version_id: "phi-2-v1",
+      merge_method: "slerp",
+      merge_ratio: 0.5,
+      status: "succeeded" as any,
+      job_id: "mock-job-id",
+      created_at: new Date().toISOString()
+    };
+    return {
+      data: {
+        merge,
+        logs: [
+          { content: "Initializing model merge configuration (DEMO fallback)", level: "INFO", created_at: new Date().toISOString() },
+          { content: "Loading parent model weights...", level: "INFO", created_at: new Date().toISOString() },
+          { content: `Merging weights using ${merge.merge_method.toUpperCase()} with ratio ${merge.merge_ratio}...`, level: "INFO", created_at: new Date().toISOString() },
+          { content: "Merged model registered successfully under ID: merged-mock-12345", level: "INFO", created_at: new Date().toISOString() }
+        ]
+      },
+      status: "DEMO" as const
+    };
+  }
+}
+

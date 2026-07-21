@@ -379,3 +379,17 @@ class FeatureFlag(SQLModel, table=True):
     workspace_id: str = Field(foreign_key="workspace.id", index=True)
     flag_key: str
     is_enabled: bool = False
+
+class ModelMerge(SQLModel, table=True):
+    id: Optional[str] = Field(default=None, primary_key=True)
+    workspace_id: str = Field(foreign_key="workspace.id", index=True)
+    name: str
+    parent_a_version_id: str = Field(foreign_key="modelversion.id")
+    parent_b_version_id: str = Field(foreign_key="modelversion.id")
+    merged_model_version_id: Optional[str] = Field(default=None, foreign_key="modelversion.id")
+    merge_method: str  # "slerp", "ties", "dare"
+    merge_ratio: float  # 0.0 to 1.0 (weight of parent B)
+    status: JobStatus = Field(default=JobStatus.QUEUED)
+    job_id: Optional[str] = Field(default=None, foreign_key="job.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    completed_at: Optional[datetime] = None
